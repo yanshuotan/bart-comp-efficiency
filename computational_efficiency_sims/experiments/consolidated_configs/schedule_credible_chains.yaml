@@ -1,0 +1,40 @@
+# experiments/consolidated_configs/schedule_credible_chains.yaml
+# Configuration for schedule experiment with credible chains saved for GR analysis
+
+dgp: "piecewise_linear_kunzel"  # Default DGP for GR analysis
+
+dgp_params:
+  n_features: 10
+
+bart_params:
+  ndpost: 1000      # Match GR analysis config
+  nskip: 1000
+  n_trees: 200
+  proposal_probs:
+    grow: 0.25
+    prune: 0.25
+    change: 0.4
+    swap: 0.1
+
+experiment_params:
+  name: "Schedule"
+  type: schedule
+  schedules:
+    - name: "Linear_3.0_to_1.0"
+      type: "linear"
+      params: {t_max: 3.0, t_min: 1.0}
+  main_seed: 1
+  n_train_samples_list: [10000]  # Focus on large n where mixing issues appear
+  n_test_samples: 500            # Match GR analysis config
+  test_set_fraction: 0.1
+  n_chains: 8
+  plot_results: False
+  log_to_wandb: False
+  save_full_chains: True         # CRITICAL: Save for GR analysis
+
+artifacts_dir: "../scratch/schedule_credible_predictions_runs"
+
+# To run:
+# python experiments/runner.py --config-name schedule_credible_chains dgp=piecewise_linear_kunzel
+# python experiments/runner.py --config-name schedule_credible_chains dgp=1199_BNG_echoMonths
+# python experiments/runner.py --config-name schedule_credible_chains dgp=low_lei_candes

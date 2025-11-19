@@ -1,0 +1,96 @@
+# experiments/consolidated_configs/credible_predictions_gr_analysis.yaml
+# Unified configuration for credible predictions with GR analysis
+# Saves full chains for computing Gelman-Rubin statistics on quantiles
+
+dgp: "piecewise_linear_kunzel"  # Override from command line for different datasets
+
+dgp_params:
+  n_features: 10  # Adjust for specific DGPs (e.g., 36 for satellite_image)
+
+bart_params:
+  ndpost: 1000      # Number of posterior samples to keep  
+  nskip: 1000       # Number of burn-in samples to discard
+  n_trees: 200      # Number of trees in BART
+  proposal_probs:
+    grow: 0.25
+    prune: 0.25
+    change: 0.4
+    swap: 0.1
+
+experiment_params:
+  name: "CrediblePredictions"
+  type: grid
+  param_to_vary: "bart_params.temperature"
+  param_values: [1.0, 2.0, 3.0]  # Fixed temperatures for most datasets
+  main_seed: 1                       
+  n_train_samples_list: [10000]  # Use 10k for most, override to [5000] for satellite
+  n_test_samples: 500                  
+  test_set_fraction: 0.1               
+  n_chains: 8                          
+  plot_results: False                  
+  log_to_wandb: False                  
+  save_full_chains: True              # CRITICAL: Save for GR analysis
+
+artifacts_dir: "../scratch/credible_predictions_runs"
+
+# =============================================================================
+# USAGE INSTRUCTIONS
+# =============================================================================
+#
+# This config supports all datasets and variations needed for GR analysis.
+# Run each dataset separately by overriding the dgp parameter.
+#
+# --- SYNTHETIC DATASETS (n_train=10000) ---
+#
+# Piecewise Linear (Künzel):
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=piecewise_linear_kunzel
+#
+# Low-dimensional smooth (Lei & Candès):
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=low_lei_candes
+#
+# --- REAL DATASETS (n_train=10000) ---
+#
+# California Housing:
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=california_housing
+#
+# Echo Months (PMLB):
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=1199_BNG_echoMonths
+#
+# Breast Tumor (PMLB):
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=1201_BNG_breastTumor
+#
+# --- SPECIAL CASES ---
+#
+# Satellite Image at n=5000 (use smaller sample size):
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=294_satellite_image \
+#     dgp_params.n_features=36 \
+#     experiment_params.n_train_samples_list=[5000]
+#
+# --- LINEAR SCHEDULE (for comparison with fixed temperatures) ---
+#
+# Run with linear schedule instead of fixed temperatures:
+#   python experiments/runner.py --config-name credible_predictions_gr_analysis \
+#     dgp=piecewise_linear_kunzel \
+#     experiment_params.type=schedule \
+#     experiment_params.schedules='[{name: "Linear_3.0_to_1.0", type: "linear", params: {t_max: 3.0, t_min: 1.0}}]' \
+#     artifacts_dir="../scratch/schedule_credible_predictions_runs"
+#
+# Or use schedule_credible_chains config for cleaner syntax:
+#   python experiments/runner.py --config-name schedule_credible_chains \
+#     dgp=piecewise_linear_kunzel
+#
+# --- NOTES ---
+#
+# 1. For satellite_image, MUST set n_features=36 and n_train=5000
+# 2. For schedule experiments, use type=schedule or the schedule_credible_chains config
+# 3. All experiments use 8 chains for robust GR statistics
+# 4. Chains are saved as compressed .npz files (~100MB per config)
+# 5. Output goes to ../scratch/credible_predictions_runs/<dgp>/seed_<N>/ntrain_<M>/
+#
+

@@ -1,0 +1,10 @@
+# Configuration for consolidated plotting script
+experiment_name: "Temperature"  # Options: Marginalized, Dirichlet, Initialization, Temperature, Schedule, Trees, Burn-in, Thresholds
+output_dir: "plots_publication_v2"
+create_combined_temp_schedule: true  # Set to true to create combined Temperature + Schedule plots
+
+# To run:
+# python experiments/plotting_consolidated.py experiment_name=Temperature
+# python experiments/plotting_consolidated.py experiment_name=Schedule
+# python experiments/plotting_consolidated.py experiment_name=Temperature create_combined_temp_schedule=true
+

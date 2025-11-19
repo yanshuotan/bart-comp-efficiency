@@ -1,0 +1,47 @@
+# Output directories
+experiments/outputs/
+experiments/consolidated_outputs/
+experiments/aggregated_plots/
+experiments/aggregated_plots_consolidated/
+experiments/plots_*/
+
+# Generated files
+experiments/master_results_cache.csv
+gr_quantile_results*.csv
+*.pkl
+*.npz
+*.npy
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+slurm_logs/
+wandb/
+
+# Hydra
+outputs/
+multirun/

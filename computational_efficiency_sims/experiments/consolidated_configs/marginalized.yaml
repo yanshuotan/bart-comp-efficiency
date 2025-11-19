@@ -1,0 +1,38 @@
+# experiments/consolidated_configs/marginalized.yaml
+
+dgp: "linear_additive"
+
+dgp_params:
+  n_features: 10
+
+bart_params:
+  ndpost: 1000     # Reduced from 10k for marginalized speed
+  nskip: 1000      # Keep standard burn-in
+  n_trees: 200
+  temperature: 1.0
+  proposal_probs:
+    grow: 0.25
+    prune: 0.25
+    change: 0.4
+    swap: 0.1
+
+experiment_params:
+  name: "Marginalized"
+  type: pairs
+  pairs:
+    - name: "Marginalized"
+      params:
+        bart_params.marginalize: True
+    - name: "Standard"
+      params:
+        bart_params.marginalize: False
+  main_seed: 1
+  n_train_samples_list: [100, 200, 500]
+  n_test_samples: 10000
+  test_set_fraction: 0.1
+  n_chains: 8
+  plot_results: False
+  log_to_wandb: False
+  save_full_chains: False
+
+artifacts_dir: "experiments/consolidated_outputs/marginalized_runs" 

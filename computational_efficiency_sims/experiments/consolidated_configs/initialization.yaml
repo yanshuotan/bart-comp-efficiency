@@ -1,0 +1,50 @@
+# experiments/consolidated_configs/initialization.yaml
+
+dgp: "linear_additive"  # Default DGP
+
+dgp_params:
+  n_features: 10 # Adjust as needed for specific DGPs
+
+bart_params:
+  ndpost: 10000
+  nskip: 1000
+  n_trees: 20
+  temperature: 1.0
+  proposal_probs:
+    grow: 0.25
+    prune: 0.25
+    change: 0.4
+    swap: 0.1
+
+xgb_params:
+  max_depth: 4
+  learning_rate: 0.2
+
+xgb_tuning_params:
+  enabled: True
+  n_iter: 10
+
+experiment_params:
+  name: "Initialization"
+  type: pairs
+  pairs:
+    - name: "XGBoostInit"
+      params:
+        bart_params.init_from_xgb: True
+    - name: "FromScratch"
+      params:
+        bart_params.init_from_xgb: False
+  main_seed: 1
+  n_train_samples_list: [200, 500, 1000, 5000, 10000]
+  n_test_samples: 10000
+  test_set_fraction: 0.1
+  n_chains: 8
+  plot_results: False
+  log_to_wandb: False
+  save_full_chains: False
+
+artifacts_dir: "experiments/consolidated_outputs/initialization_runs"
+debug_xgb_init: False
+
+# To run:
+# python experiments/runner.py --config-path experiments/consolidated_configs --config-name initialization dgp=friedman1 dgp_params.n_features=5 
