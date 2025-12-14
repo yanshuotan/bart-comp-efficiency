@@ -35,7 +35,9 @@ EXPERIMENT_CONFIGS = {
     "Schedule": "consolidated_configs/schedule.yaml",
     "Trees": "consolidated_configs/trees.yaml",
     "Burn-in": "consolidated_configs/burnin.yaml",
+    "ProposalMoves": "consolidated_configs/proposal_moves.yaml",
 }
+
 
 
 def load_pickle_file(pkl_path: Path) -> Dict:
@@ -153,7 +155,7 @@ def generate_master_cache(output_path: str = None) -> pd.DataFrame:
     LOGGER.info("Starting Master Cache Generation")
     LOGGER.info("=" * 80)
     
-    # Scan each experiment
+    # Scan each experiment (main configs)
     for exp_name, config_rel_path in EXPERIMENT_CONFIGS.items():
         config_path = script_dir / config_rel_path
         

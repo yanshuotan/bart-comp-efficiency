@@ -213,9 +213,13 @@ def load_and_prepare_data(cfg: DictConfig, data_variances):
     # Generate a noisy version of the test y for evaluating predictive intervals
     y_test_run_noisy = None
     if not is_real_dataset:
-        # Set SNR based on dataset: SNR=1 for piecewise_linear_kunzel and low_lei_candes, SNR=3 for others
-        snr_divisor = 1 if cfg.dgp in ['piecewise_linear_kunzel'] else 3
-        noise_std_dev = np.sqrt(data_variances[cfg.dgp]['required_noise_for_snr_1'] / snr_divisor)
+        # Use noise from config if explicitly set, otherwise calculate from data_variances
+        if 'noise' in cfg.dgp_params and cfg.dgp_params.noise is not None:
+            noise_std_dev = cfg.dgp_params.noise
+        else:
+            # Set SNR based on dataset: SNR=1 for piecewise_linear_kunzel and low_lei_candes, SNR=3 for others
+            snr_divisor = 1 if cfg.dgp in ['piecewise_linear_kunzel', 'piecewise_linear_sparse'] else 3
+            noise_std_dev = np.sqrt(data_variances[cfg.dgp]['required_noise_for_snr_1'] / snr_divisor)
         rng = np.random.default_rng(test_seed) # Use same seed for consistency
         y_test_run_noisy = y_test_run_true + rng.normal(0, noise_std_dev, size=y_test_run_true.shape)
     else:
@@ -246,9 +250,12 @@ def prepare_train_data(cfg: DictConfig, current_n_train: int, data_variances, X_
     else:
         dgp_params_train_dict = OmegaConf.to_container(cfg.dgp_params, resolve=True)
         dgp_params_train_dict['n_samples'] = current_n_train
-        # Set SNR based on dataset: SNR=1 for piecewise_linear_kunzel and low_lei_candes, SNR=3 for others
-        snr_divisor = 1 if cfg.dgp in ['piecewise_linear_kunzel'] else 3
-        dgp_params_train_dict['noise'] = data_variances[cfg.dgp]['required_noise_for_snr_1'] / snr_divisor
+        # Set SNR based on dataset, but only if noise is not explicitly set in config
+        # For _original variants, use config noise directly (e.g., noise=1.0)
+        if 'noise' not in dgp_params_train_dict or dgp_params_train_dict['noise'] is None:
+            # Set SNR based on dataset: SNR=1 for piecewise_linear_kunzel and low_lei_candes, SNR=3 for others
+            snr_divisor = 1 if cfg.dgp in ['piecewise_linear_kunzel', 'piecewise_linear_sparse'] else 3
+            dgp_params_train_dict['noise'] = data_variances[cfg.dgp]['required_noise_for_snr_1'] / snr_divisor
         dgp_params_train_dict['random_seed'] = dgp_seed_train
         generator_train = DataGenerator(**dgp_params_train_dict)
         X_train_run, y_train_run = generator_train.generate(scenario=cfg.dgp)

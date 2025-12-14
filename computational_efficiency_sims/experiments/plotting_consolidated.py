@@ -361,9 +361,15 @@ def set_publication_params():
     plt.rcParams['ytick.labelsize'] = 16
     plt.rcParams['lines.linewidth'] = 4
 
-def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
+def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str, variant: str = None):
     """
     Generates and saves line plots for each DGP, grouped by metric type.
+    
+    Args:
+        df: DataFrame with results
+        output_dir: Directory to save plots
+        exp_name: Experiment name
+        variant: Optional variant name (e.g., 'sparse_original')
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -373,10 +379,24 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
     # Special handling for Burn-in: include temperature=1.0 as burnin_1000
     if exp_name == 'Burn-in':
         script_dir = Path(__file__).parent
-        temp_config_path = script_dir / "consolidated_configs" / "temperature.yaml"
+        # For sparse_original variant, use sparse_original temperature config
+        if variant:
+            temp_config_name = f"piecewise_linear_{variant}_temperature.yaml"
+        else:
+            temp_config_name = "temperature.yaml"
+        temp_config_path = script_dir / "consolidated_configs" / temp_config_name
         if temp_config_path.exists():
             temp_cfg = OmegaConf.load(temp_config_path)
-            temp_df = load_results_to_dataframe(Path(temp_cfg.artifacts_dir), experiment_name='Temperature')
+            # Fix path construction for temperature artifacts
+            artifact_dir_str = temp_cfg.artifacts_dir
+            if artifact_dir_str.startswith('experiments/'):
+                temp_artifact_dir = Path('..') / artifact_dir_str
+            else:
+                temp_artifact_dir = Path(artifact_dir_str)
+            temp_df = load_results_to_dataframe(temp_artifact_dir, experiment_name='Temperature', use_cache=False)
+            # Filter for piecewise_linear_sparse only (for sparse_original)
+            if variant == 'sparse_original':
+                temp_df = temp_df[temp_df['dgp'] == 'piecewise_linear_sparse'].copy()
             # Filter for temperature=1.0 only and rename to burnin_1000
             temp_df = temp_df[temp_df['variation'] == 'temperature_1.0'].copy()
             temp_df['variation'] = 'burnin_1000'
@@ -385,7 +405,8 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
             LOGGER.info(f"Added temperature=1.0 data as burnin_1000: {len(temp_df)} rows")
     
     # Special handling for ProposalMoves: include temperature=1.0 as AllMoves baseline
-    if exp_name == 'ProposalMoves':
+    # Skip this for sparse_original variant (data already has AllMoves variation in the config)
+    if exp_name == 'ProposalMoves' and not variant:
         script_dir = Path(__file__).parent
         temp_config_path = script_dir / "consolidated_configs" / "temperature.yaml"
         if temp_config_path.exists():
@@ -401,10 +422,24 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
     # Special handling for Thresholds: include temperature=1.0 as max_bins_ntrain baseline
     if exp_name == 'Thresholds':
         script_dir = Path(__file__).parent
-        temp_config_path = script_dir / "consolidated_configs" / "temperature.yaml"
+        # For sparse_original variant, use sparse_original temperature config
+        if variant:
+            temp_config_name = f"piecewise_linear_{variant}_temperature.yaml"
+        else:
+            temp_config_name = "temperature.yaml"
+        temp_config_path = script_dir / "consolidated_configs" / temp_config_name
         if temp_config_path.exists():
             temp_cfg = OmegaConf.load(temp_config_path)
-            temp_df = load_results_to_dataframe(Path(temp_cfg.artifacts_dir), experiment_name='Temperature')
+            # Fix path construction for temperature artifacts
+            artifact_dir_str = temp_cfg.artifacts_dir
+            if artifact_dir_str.startswith('experiments/'):
+                temp_artifact_dir = Path('..') / artifact_dir_str
+            else:
+                temp_artifact_dir = Path(artifact_dir_str)
+            temp_df = load_results_to_dataframe(temp_artifact_dir, experiment_name='Temperature', use_cache=False)
+            # Filter for piecewise_linear_sparse only (for sparse_original)
+            if variant == 'sparse_original':
+                temp_df = temp_df[temp_df['dgp'] == 'piecewise_linear_sparse'].copy()
             # Filter for temperature=1.0 only and rename to max_bins_ntrain
             temp_df = temp_df[temp_df['variation'] == 'temperature_1.0'].copy()
             temp_df['variation'] = 'max_bins_ntrain'
@@ -427,10 +462,10 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
     
     for dgp in df['dgp'].unique():
         # Choose coverage metric based on dataset type
-        # For synthetic datasets: use coverage_predictive (predictive intervals vs noisy observations)
-        # For real datasets: use coverage_pred_vs_true (same as coverage_predictive for real data)
+        # For synthetic datasets: use coverage_credible (credible intervals vs noiseless function)
+        # For real datasets: use coverage_pred_vs_true (predictive intervals vs observed data)
         is_real_dataset = dgp in ALLOWED_REAL_DATASETS
-        coverage_metric = "coverage_pred_vs_true" if is_real_dataset else "coverage_predictive"
+        coverage_metric = "coverage_pred_vs_true" if is_real_dataset else "coverage_credible"
         
         metric_groups = {
             "Credible_Intervals": {
@@ -455,6 +490,10 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
             dgp_title = dgp.replace('_', ' ').title()
             dgp_filename = "".join(c if c.isalnum() else "_" for c in dgp)
             
+            # For sparse_original variant, use "piecewise_linear_kunzel" naming to match paper
+            if variant == 'sparse_original' and dgp == 'piecewise_linear_sparse':
+                dgp_filename = "piecewise_linear_kunzel"
+            
             for metric_short_name, metric_full_name in metrics_map.items():
                 # Create single subplot for this metric
                 fig, ax = plt.subplots(1, 1, figsize=(7.8, 5.8))
@@ -468,6 +507,12 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
                     clean_title = 'Low Dimensional Smooth'
                 elif dgp == 'piecewise_linear_kunzel':
                     clean_title = 'Piecewise Linear'
+                elif dgp == 'piecewise_linear_sparse':
+                    # For sparse_original variant, use generic "Piecewise Linear" title
+                    if variant == 'sparse_original':
+                        clean_title = 'Piecewise Linear'
+                    else:
+                        clean_title = 'Piecewise Linear Sparse'
                 elif dgp == '1199_BNG_echoMonths':
                     clean_title = 'Echo Months'
                 elif dgp == '1201_BNG_breastTumor':
@@ -533,10 +578,16 @@ def create_plots(df: pd.DataFrame, output_dir: Path, exp_name: str):
                 LOGGER.info(f"Saved plot to {plot_path}")
 
 def create_combined_temp_schedule_plots(temp_df: pd.DataFrame, schedule_df: pd.DataFrame, 
-                                       output_dir: Path):
+                                       output_dir: Path, variant: str = None):
     """
     Creates combined temperature + schedule plots on the same axes.
     Each plot is saved as a single PDF file.
+    
+    Args:
+        temp_df: Temperature results DataFrame
+        schedule_df: Schedule results DataFrame
+        output_dir: Directory to save plots
+        variant: Optional variant name (e.g., 'sparse_original')
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     
@@ -578,10 +629,10 @@ def create_combined_temp_schedule_plots(temp_df: pd.DataFrame, schedule_df: pd.D
     
     for dgp in combined_df['dgp'].unique():
         # Choose coverage metric based on dataset type
-        # For synthetic datasets: use coverage_predictive (predictive intervals vs noisy observations)
-        # For real datasets: use coverage_pred_vs_true (same as coverage_predictive for real data)
+        # For synthetic datasets: use coverage_credible (credible intervals vs noiseless function)
+        # For real datasets: use coverage_pred_vs_true (predictive intervals vs observed data)
         is_real_dataset = dgp in ALLOWED_REAL_DATASETS
-        coverage_metric = "coverage_pred_vs_true" if is_real_dataset else "coverage_predictive"
+        coverage_metric = "coverage_pred_vs_true" if is_real_dataset else "coverage_credible"
         
         metric_groups = {
             "Credible_Intervals": {
@@ -598,6 +649,10 @@ def create_combined_temp_schedule_plots(temp_df: pd.DataFrame, schedule_df: pd.D
             dgp_title = dgp.replace('_', ' ').title()
             dgp_filename = "".join(c if c.isalnum() else "_" for c in dgp)
             
+            # For sparse_original variant, use "piecewise_linear_kunzel" naming to match paper
+            if variant == 'sparse_original' and dgp == 'piecewise_linear_sparse':
+                dgp_filename = "piecewise_linear_kunzel"
+            
             for metric_short_name, metric_full_name in metrics_map.items():
                 # Create single subplot for this metric
                 fig, ax = plt.subplots(1, 1, figsize=(7.8, 5.8))
@@ -611,6 +666,12 @@ def create_combined_temp_schedule_plots(temp_df: pd.DataFrame, schedule_df: pd.D
                     clean_title = 'Low Dimensional Smooth'
                 elif dgp == 'piecewise_linear_kunzel':
                     clean_title = 'Piecewise Linear'
+                elif dgp == 'piecewise_linear_sparse':
+                    # For sparse_original variant, use generic "Piecewise Linear" title
+                    if variant == 'sparse_original':
+                        clean_title = 'Piecewise Linear'
+                    else:
+                        clean_title = 'Piecewise Linear Sparse'
                 elif dgp == '1199_BNG_echoMonths':
                     clean_title = 'Echo Months'
                 elif dgp == '1201_BNG_breastTumor':
@@ -688,6 +749,9 @@ def create_combined_temp_schedule_plots(temp_df: pd.DataFrame, schedule_df: pd.D
 def main(cfg: DictConfig):
     exp_name = cfg.experiment_name
     output_dir = Path(cfg.output_dir)
+    
+    # Get variant (e.g., "sparse_original" for piecewise_linear_sparse original experiments)
+    variant = cfg.get("variant", None)
 
     experiment_configs = {
         "Marginalized": "marginalized.yaml",
@@ -701,7 +765,17 @@ def main(cfg: DictConfig):
         "ProposalMoves": "proposal_moves.yaml"
     }
     
-    exp_config_name = experiment_configs.get(exp_name)
+    # If variant is specified, use variant-specific configs
+    if variant:
+        exp_config_name = experiment_configs.get(exp_name)
+        if exp_config_name:
+            # Replace .yaml with _{variant}.yaml
+            base_name = exp_config_name.replace('.yaml', '')
+            exp_config_name = f"piecewise_linear_{variant}_{base_name}.yaml"
+            LOGGER.info(f"Using variant config: {exp_config_name}")
+    else:
+        exp_config_name = experiment_configs.get(exp_name)
+    
     if not exp_config_name:
         LOGGER.error(f"Unknown experiment name: {exp_name}")
         return
@@ -727,15 +801,22 @@ def main(cfg: DictConfig):
     
     if not df.empty:
         LOGGER.info(f"Found {len(df)} results. Generating plots...")
-        create_plots(df, output_dir, exp_name)
+        create_plots(df, output_dir, exp_name, variant=variant)
         
         # If this is Temperature or Schedule, also check for combined plot
         if exp_name in ["Temperature", "Schedule"] and cfg.get("create_combined_temp_schedule", False):
             LOGGER.info("Creating combined Temperature + Schedule plots...")
             
             # Load both temperature and schedule data
-            temp_config_path = script_dir / "consolidated_configs" / "temperature.yaml"
-            sched_config_path = script_dir / "consolidated_configs" / "schedule.yaml"
+            if variant:
+                temp_config_name = f"piecewise_linear_{variant}_temperature.yaml"
+                sched_config_name = f"piecewise_linear_{variant}_schedule.yaml"
+            else:
+                temp_config_name = "temperature.yaml"
+                sched_config_name = "schedule.yaml"
+            
+            temp_config_path = script_dir / "consolidated_configs" / temp_config_name
+            sched_config_path = script_dir / "consolidated_configs" / sched_config_name
             
             temp_cfg = OmegaConf.load(temp_config_path)
             sched_cfg = OmegaConf.load(sched_config_path)
@@ -748,7 +829,7 @@ def main(cfg: DictConfig):
             sched_df = load_results_to_dataframe(sched_artifact_dir, experiment_name='Schedule', use_cache=False)
             
             if not temp_df.empty and not sched_df.empty:
-                create_combined_temp_schedule_plots(temp_df, sched_df, output_dir)
+                create_combined_temp_schedule_plots(temp_df, sched_df, output_dir, variant=variant)
         
         LOGGER.info("Plotting complete.")
     else:

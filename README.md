@@ -6,6 +6,7 @@ the results from our paper: https://arxiv.org/abs/2406.19958.
 ## Prerequisites
 
 Before running these experiments, you must install the `bart_playground` package:
+To exactly match the package version for these simulations, you should pull from the branch `computational_efficiency_sims`.
 
 ```bash
 # Option 1: From PyPI
@@ -23,8 +24,8 @@ pip install -e .
 ```bash
 python -m experiments.runner \
   --config-name temperature \
-  dgp=linear_additive \
-  experiment_params.n_train_samples_list=[100,500]
+  dgp=piecewise_linear_kunzel \
+  experiment_params.n_train_samples_list=[200,500]
 ```
 
 ### Run credible predictions for GR analysis
@@ -57,10 +58,8 @@ python experiments/plotting_consolidated.py experiment_name=Temperature
 ## Datasets
 
 ### Synthetic (auto-generated)
-- linear_additive
-- piecewise_linear_kunzel
-- low_lei_candes
-- high_lei_candes
+- piecewise_linear_kunzel (piecewise linear, 20 features)
+- low_lei_candes (Lei & Candès, 2021)
 
 ### Real-world (auto-downloaded)
 - california_housing (sklearn)

@@ -175,12 +175,19 @@ def scan_and_analyze_all_runs(base_dir, quantiles=[0.05, 0.25, 0.5, 0.75, 0.95])
             ntrain = int(parts[ntrain_idx].replace('ntrain_', ''))
             
             # Extract temperature from filename
-            filename = npz_file.stem  # credible_chains_temperature_1.0
-            temp_str = filename.replace('credible_chains_temperature_', '')
-            temperature = float(temp_str)
+            filename = npz_file.stem  # credible_chains_temperature_1.0 or credible_chains_Linear_3.0_to_1.0
+            if 'Linear_3.0_to_1.0' in filename:
+                temperature = 'linear'
+                temp_str = 'linear'
+            else:
+                temp_str = filename.replace('credible_chains_temperature_', '')
+                temperature = float(temp_str)
             
             # Find corresponding PKL file
-            pkl_file = npz_file.parent / f"results_temperature_{temp_str}.pkl"
+            if temperature == 'linear':
+                pkl_file = npz_file.parent / "results_Linear_3.0_to_1.0.pkl"
+            else:
+                pkl_file = npz_file.parent / f"results_temperature_{temp_str}.pkl"
             
             # Analyze this run
             analysis = analyze_experiment_run(npz_file, pkl_file)
@@ -253,12 +260,15 @@ def plot_gr_by_quantile(df, output_dir='plots_gr_quantiles'):
     quantile_cols = [col for col in df.columns if col.startswith('gr_q') and not col.startswith('gr_q_')]
     quantiles = [int(col.replace('gr_q', '')) / 100 for col in quantile_cols]
     
-    # Define color palette for temperatures (consistent with Fig 4)
+    # Define color palette for temperatures (consistent with temperature_schedule plots)
     temp_colors = {
         1.0: '#000000',        # Black for T=1.0 (baseline)
-        2.0: '#8B0000',        # Dark red for T=2.0
+        2.0: '#8B0000',        # Dark red for T=2.0  
         3.0: '#FF6B6B',        # Light red for T=3.0
-        'linear': '#FF8C00',   # Orange for linear schedule
+        '1.0': '#000000',      # Black for T=1.0 (string version)
+        '2.0': '#8B0000',      # Dark red for T=2.0 (string version)
+        '3.0': '#FF6B6B',      # Light red for T=3.0 (string version)
+        'linear': '#FF8C00',   # Orange for linear schedule (matches temperature_schedule plots)
     }
     
     # Temperature labels mapping
@@ -269,95 +279,102 @@ def plot_gr_by_quantile(df, output_dir='plots_gr_quantiles'):
         'linear': 'Linear Schedule',
     }
     
-    # Filter: only use n_train = 10000
-    df_filtered = df[df['ntrain'] == 10000].copy()
-    
-    # Plot: Grouped bar plot - one subplot per DGP
-    for dgp in df_filtered['dgp'].unique():
-        dgp_df = df_filtered[df_filtered['dgp'] == dgp]
+    # Generate plots for both n_train = 5000 and n_train = 10000  
+    for ntrain_focus in [5000, 10000]:
+        df_filtered = df[df['ntrain'] == ntrain_focus].copy()
         
-        # Get unique temperatures and filter out cosine schedule
-        temps = sorted([t for t in dgp_df['temperature'].unique() if t != 'cosine'])
-        
-        # If 'linear' schedule exists, include it
-        if 'linear' in dgp_df['temperature'].unique():
-            temps = [t for t in temps if t != 'linear']  # Remove if numeric
-            temps.append('linear')
-        
-        if len(temps) == 0:
-            LOGGER.warning(f"No valid temperatures found for {dgp}")
+        if df_filtered.empty:
             continue
-        
-        # Create figure (using rcParams figsize)
-        fig, ax = plt.subplots(1, 1)
-        
-        # Set up bar positions
-        n_quantiles = len(quantiles)
-        n_temps = len(temps)
-        bar_width = 0.8 / n_temps
-        x_positions = np.arange(n_quantiles)
-        
-        # Plot bars for each temperature
-        for i, temp in enumerate(temps):
-            subset_df = dgp_df[dgp_df['temperature'] == temp]
             
-            if len(subset_df) > 0:
-                # Get GR values for each quantile (mean and SEM across seeds)
-                gr_means = [subset_df[col].mean() for col in quantile_cols]
-                gr_sems = [subset_df[col].sem() for col in quantile_cols]
-                gr_errors = [1.96 * sem for sem in gr_sems]  # 95% confidence intervals
+        # Plot: Grouped bar plot - one subplot per DGP
+        for dgp in df_filtered['dgp'].unique():
+            dgp_df = df_filtered[df_filtered['dgp'] == dgp]
+        
+            # Get unique temperatures and filter out cosine schedule
+            all_temps = dgp_df['temperature'].unique()
+            
+            # Add numeric temperatures first (keep as strings but sort numerically)
+            numeric_temps = [t for t in all_temps if t not in ['cosine', 'linear']]
+            temps = sorted(numeric_temps, key=float) if numeric_temps else []
+            
+            # Add linear schedule last if it exists
+            if 'linear' in all_temps:
+                temps.append('linear')
+            
+            if len(temps) == 0:
+                LOGGER.warning(f"No valid temperatures found for {dgp}")
+                continue
+            
+            # Create figure (using rcParams figsize)
+            fig, ax = plt.subplots(1, 1)
+            
+            # Set up bar positions
+            n_quantiles = len(quantiles)
+            n_temps = len(temps)
+            bar_width = 0.8 / n_temps
+            x_positions = np.arange(n_quantiles)
+            
+            # Plot bars for each temperature
+            for i, temp in enumerate(temps):
+                subset_df = dgp_df[dgp_df['temperature'] == temp]
                 
-                # Get color for this temperature
-                color = temp_colors.get(temp, '#888888')
-                label = temp_labels.get(temp, f'T={temp}')
-                
-                # Calculate bar positions for this temperature
-                bar_positions = x_positions + (i - n_temps/2 + 0.5) * bar_width
-                
-                # Plot bars with error bars
-                ax.bar(bar_positions, gr_means, bar_width, 
-                      color=color, label=label, alpha=0.9, edgecolor='black', linewidth=0.5)
-                ax.errorbar(bar_positions, gr_means, yerr=gr_errors, fmt='none', 
-                           ecolor='black', elinewidth=1.2, capsize=2, capthick=1.2)
-        
-        # Add reference line at R̂ = 1.1 (without adding to legend)
-        ax.axhline(y=1.1, color='red', linestyle='--', linewidth=1.5, alpha=0.6)
-        
-        # Customize plot
-        ax.set_xlabel('Quantile', fontweight='bold')
-        ax.set_ylabel(r'Gelman-Rubin $\hat{R}$', fontweight='bold')
-        
-        # Custom titles for specific datasets
-        import re
-        dgp_title = dgp.replace("_", " ").title()
-        dgp_title = re.sub(r'^\d+\s*(Bng\s*)?', '', dgp_title)  # Remove ID prefix
-        if dgp == 'low_lei_candes':
-            dgp_title = 'Low Dimensional Smooth'
-        elif dgp == 'piecewise_linear_kunzel':
-            dgp_title = 'Piecewise Linear'
-        elif dgp == '1199_BNG_echoMonths':
-            dgp_title = 'Echo Months'
-        elif dgp == '1201_BNG_breastTumor':
-            dgp_title = 'Breast Tumor'
-        
-        ax.set_title(dgp_title, fontweight='bold')
-        
-        # Set x-axis ticks and labels
-        ax.set_xticks(x_positions)
-        ax.set_xticklabels([f'{q:.2f}' for q in quantiles])
-        
-        # Add grid and legend (only for Echo Months)
-        ax.grid(True, alpha=0.3, axis='y')
-        if dgp == '1199_BNG_echoMonths':
-            ax.legend(frameon=True, loc='upper right')
-        ax.set_ylim(0.98, None)  # Let matplotlib auto-scale the upper limit
-        
-        plt.tight_layout()
-        plot_path = output_path / f'gr_quantiles_{dgp}_ntrain10k.png'
-        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        LOGGER.info(f"Saved plot to {plot_path}")
+                if len(subset_df) > 0:
+                    # Get GR values for each quantile (mean and SEM across seeds)
+                    gr_means = [subset_df[col].mean() for col in quantile_cols]
+                    gr_sems = [subset_df[col].sem() for col in quantile_cols]
+                    gr_errors = [1.96 * sem for sem in gr_sems]  # 95% confidence intervals
+                    
+                    # Get color for this temperature
+                    color = temp_colors.get(temp, '#888888')
+                    label = temp_labels.get(temp, f'T={temp}')
+                    
+                    # Calculate bar positions for this temperature
+                    bar_positions = x_positions + (i - n_temps/2 + 0.5) * bar_width
+                    
+                    # Plot bars with error bars
+                    ax.bar(bar_positions, gr_means, bar_width, 
+                          color=color, label=label, alpha=0.9, edgecolor='black', linewidth=0.5)
+                    ax.errorbar(bar_positions, gr_means, yerr=gr_errors, fmt='none', 
+                               ecolor='black', elinewidth=1.2, capsize=2, capthick=1.2)
+            
+            # Add reference line at R̂ = 1.1 (without adding to legend)
+            ax.axhline(y=1.1, color='red', linestyle='--', linewidth=1.5, alpha=0.6)
+            
+            # Customize plot
+            ax.set_xlabel('Quantile', fontweight='bold')
+            ax.set_ylabel(r'Gelman-Rubin $\hat{R}$', fontweight='bold')
+            
+            # Custom titles for specific datasets
+            import re
+            dgp_title = dgp.replace("_", " ").title()
+            dgp_title = re.sub(r'^\d+\s*(Bng\s*)?', '', dgp_title)  # Remove ID prefix
+            if dgp == 'low_lei_candes':
+                dgp_title = 'Low Dimensional Smooth'
+            elif dgp == 'piecewise_linear_kunzel':
+                dgp_title = 'Piecewise Linear'
+            elif dgp == '1199_BNG_echoMonths':
+                dgp_title = 'Echo Months'
+            elif dgp == '1201_BNG_breastTumor':
+                dgp_title = 'Breast Tumor'
+            
+            ax.set_title(dgp_title, fontweight='bold')
+            
+            # Set x-axis ticks and labels
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels([f'{q:.2f}' for q in quantiles])
+            
+            # Add grid and legend (only for Echo Months)
+            ax.grid(True, alpha=0.3, axis='y')
+            if dgp == '1199_BNG_echoMonths':
+                ax.legend(frameon=True, loc='upper right')
+            ax.set_ylim(0.98, None)  # Let matplotlib auto-scale the upper limit
+            
+            plt.tight_layout()
+            plot_path = output_path / f'gr_quantiles_{dgp}_ntrain{ntrain_focus//1000}k.png'
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            LOGGER.info(f"Saved plot to {plot_path}")
     
     # Summary plot: All datasets
     fig, ax = plt.subplots(1, 1, figsize=(10, 6))
